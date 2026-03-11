@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>正方教务课表转 ICS</title>
+        <style>
+            *,
+            *::before,
+            *::after {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+
+            body {
+                width: 340px;
+                font-family:
+                    -apple-system, "PingFang SC", "Hiragino Sans GB",
+                    "Microsoft YaHei", sans-serif;
+                font-size: 13px;
+                color: #1a1a1a;
+                background: #f5f5f7;
+            }
+
+            /* ── Header ── */
+            .header {
+                background: #1d4ed8;
+                color: #fff;
+                padding: 14px 16px 12px;
+            }
+            .header h1 {
+                font-size: 15px;
+                font-weight: 600;
+                letter-spacing: 0.02em;
+            }
+            .header p {
+                font-size: 11px;
+                opacity: 0.75;
+                margin-top: 2px;
+            }
+
+            /* ── Status badge ── */
+            .status-bar {
+                display: flex;
+                align-items: center;
+                gap: 7px;
+                padding: 9px 16px;
+                background: #fff;
+                border-bottom: 1px solid #e5e7eb;
+                font-size: 12px;
+            }
+            .dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                flex-shrink: 0;
+            }
+            .dot.ok {
+                background: #22c55e;
+            }
+            .dot.warn {
+                background: #f59e0b;
+            }
+            .dot.err {
+                background: #ef4444;
+            }
+            .dot.spin {
+                background: #93c5fd;
+                animation: pulse 0.9s ease-in-out infinite alternate;
+            }
+            @keyframes pulse {
+                to {
+                    opacity: 0.3;
+                }
+            }
+
+            /* ── Main content ── */
+            .body {
+                padding: 14px 16px 16px;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            /* ── Section label ── */
+            .section-label {
+                font-size: 10px;
+                font-weight: 600;
+                color: #9ca3af;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                margin-bottom: -4px;
+            }
+
+            /* ── Form rows ── */
+            .field {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+            label {
+                font-size: 11px;
+                color: #6b7280;
+                font-weight: 500;
+                letter-spacing: 0.03em;
+            }
+
+            .row-2 {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+            }
+
+            input[type="number"],
+            input[type="date"],
+            select {
+                width: 100%;
+                padding: 6px 9px;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                font-size: 13px;
+                color: #111;
+                background: #fff;
+                outline: none;
+                transition: border-color 0.15s;
+            }
+            input:focus,
+            select:focus {
+                border-color: #1d4ed8;
+            }
+            input:disabled,
+            select:disabled {
+                background: #f3f4f6;
+                color: #9ca3af;
+                cursor: not-allowed;
+            }
+
+            /* ── Checkbox row ── */
+            .check-row {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 7px 10px;
+                background: #fff;
+                border: 1px solid #e5e7eb;
+                border-radius: 6px;
+                cursor: pointer;
+                user-select: none;
+                transition: border-color 0.15s;
+            }
+            .check-row:hover {
+                border-color: #93c5fd;
+            }
+            .check-row input[type="checkbox"] {
+                width: 15px;
+                height: 15px;
+                accent-color: #1d4ed8;
+                flex-shrink: 0;
+                cursor: pointer;
+            }
+            .check-row span {
+                font-size: 12.5px;
+                color: #374151;
+                line-height: 1.4;
+            }
+            .check-row small {
+                display: block;
+                font-size: 10.5px;
+                color: #9ca3af;
+                margin-top: 1px;
+            }
+            .check-row.disabled {
+                opacity: 0.5;
+                pointer-events: none;
+            }
+
+            /* ── Divider ── */
+            .divider {
+                border: none;
+                border-top: 1px solid #e5e7eb;
+                margin: 0;
+            }
+
+            /* ── Info box ── */
+            .info-box {
+                background: #eff6ff;
+                border: 1px solid #bfdbfe;
+                border-radius: 6px;
+                padding: 8px 10px;
+                font-size: 11.5px;
+                color: #1e40af;
+                line-height: 1.55;
+            }
+            .info-box.warn {
+                background: #fffbeb;
+                border-color: #fde68a;
+                color: #92400e;
+            }
+            .info-box.success {
+                background: #f0fdf4;
+                border-color: #bbf7d0;
+                color: #166534;
+            }
+
+            /* ── Schedule badge ── */
+            #schedule-badge {
+                display: none;
+                align-items: center;
+                gap: 6px;
+                font-size: 11.5px;
+                color: #065f46;
+                background: #ecfdf5;
+                border: 1px solid #a7f3d0;
+                border-radius: 6px;
+                padding: 6px 10px;
+            }
+            #schedule-badge.visible {
+                display: flex;
+            }
+            #schedule-badge svg {
+                flex-shrink: 0;
+            }
+
+            /* ── Generate button ── */
+            #btn-generate {
+                width: 100%;
+                padding: 9px;
+                background: #1d4ed8;
+                color: #fff;
+                border: none;
+                border-radius: 7px;
+                font-size: 13px;
+                font-weight: 600;
+                cursor: pointer;
+                transition:
+                    background 0.15s,
+                    opacity 0.15s;
+                letter-spacing: 0.03em;
+            }
+            #btn-generate:hover:not(:disabled) {
+                background: #1e40af;
+            }
+            #btn-generate:active:not(:disabled) {
+                background: #1e3a8a;
+            }
+            #btn-generate:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+
+            /* ── Result / error area ── */
+            #result {
+                display: none;
+                border-radius: 6px;
+                padding: 8px 10px;
+                font-size: 12px;
+                line-height: 1.5;
+            }
+            #result.success {
+                background: #f0fdf4;
+                border: 1px solid #bbf7d0;
+                color: #166534;
+            }
+            #result.error {
+                background: #fef2f2;
+                border: 1px solid #fecaca;
+                color: #991b1b;
+                word-break: break-all;
+            }
+
+            /* ── Footer ── */
+            .footer-note {
+                padding: 0 16px 12px;
+                font-size: 10.5px;
+                color: #9ca3af;
+                text-align: center;
+            }
+        </style>
+    </head>
+    <body>
+        <!-- Header -->
+        <div class="header">
+            <h1>正方教务课表转 ICS</h1>
+            <p>正方软件教务系统 · 课表导出工具</p>
+        </div>
+
+        <!-- Status -->
+        <div class="status-bar">
+            <span class="dot spin" id="dot"></span>
+            <span id="status-text">正在检测页面…</span>
+        </div>
+
+        <!-- Body -->
+        <div class="body">
+            <!-- 学年 + 学期 -->
+            <div class="row-2">
+                <div class="field">
+                    <label for="inp-xnm">学年（起始年份）</label>
+                    <input
+                        id="inp-xnm"
+                        type="number"
+                        min="2000"
+                        max="2099"
+                        placeholder="如 2025"
+                        disabled
+                    />
+                </div>
+                <div class="field">
+                    <label for="sel-xqm">学期</label>
+                    <select id="sel-xqm" disabled>
+                        <option value="3">第一学期（秋冬）</option>
+                        <option value="12">第二学期（春夏）</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- 第 1 周周一 -->
+            <div class="field">
+                <label for="inp-start">第 1 周周一日期</label>
+                <input id="inp-start" type="date" disabled />
+            </div>
+
+            <hr class="divider" />
+
+            <!-- 生成截止日期（可选） -->
+            <div class="field">
+                <label for="inp-end">
+                    生成截止日期
+                    <span style="font-weight: 400; color: #9ca3af"
+                        >（留空 = 整个学期）</span
+                    >
+                </label>
+                <input
+                    id="inp-end"
+                    type="date"
+                    disabled
+                    placeholder="可选，超出此日期的课程不生成"
+                />
+            </div>
+
+            <!-- 作息切换日期（可选） -->
+            <div class="field">
+                <label for="inp-switch">
+                    作息切换日期
+                    <span style="font-weight: 400; color: #9ca3af"
+                        >（自动检测，可手动覆盖）</span
+                    >
+                </label>
+                <input
+                    id="inp-switch"
+                    type="date"
+                    disabled
+                    title="五一 / 国庆前一天，此后改用另一套作息"
+                />
+            </div>
+
+            <!-- 选项：校区前缀 -->
+            <label class="check-row disabled" id="lbl-campus">
+                <input type="checkbox" id="chk-campus" disabled checked />
+                <span>
+                    在地点中显示校区
+                    <small>如「荆东校区·博学楼-202」，多校区院校推荐开启</small>
+                </span>
+            </label>
+
+            <!-- 选项：合并连续节次 -->
+            <label class="check-row disabled" id="lbl-merge">
+                <input type="checkbox" id="chk-merge" disabled checked />
+                <span>
+                    合并连续的理论 + 实验节次
+                    <small>将同一课程相邻排列的理论课与实验/实践课合并为一个事件</small>
+                </span>
+            </label>
+
+            <!-- 双作息提示 badge -->
+            <div id="schedule-badge">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span id="schedule-badge-tx"></span>
+            </div>
+
+            <!-- 提示 -->
+            <div class="info-box" id="hint-box">
+                请填写「第 1
+                周周一日期」（即开学第一天）。留空截止日期则生成整个学期的
+                ICS；节次时间由学期自动决定，全学期一套，无需手动切换。
+            </div>
+
+            <!-- Generate button -->
+            <button id="btn-generate" disabled>获取课表并生成 .ics</button>
+
+            <!-- Result -->
+            <div id="result"></div>
+        </div>
+
+        <div class="footer-note">
+            仅在已登录的教务系统页面有效 · 数据不会上传
+        </div>
+
+        <script type="module" src="popup.js"></script>
+    </body>
+</html>

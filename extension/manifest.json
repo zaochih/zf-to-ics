@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "正方教务课表转 ICS",
+  "version": "1.0.0",
+  "description": "将正方软件教务系统课表导出为 .ics 日历文件",
+  "permissions": ["tabs"],
+  "host_permissions": ["*://*.edu.cn/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "正方教务课表转 ICS",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.edu.cn/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
