@@ -22,16 +22,30 @@ import {
 
 let passed = 0;
 let failed = 0;
+/** Promises for async test bodies — awaited before printing summary. */
+const _asyncTests = [];
 
 function test(name, fn) {
+  let result;
   try {
-    fn();
-    console.log(`  ✅ ${name}`);
-    passed++;
+    result = fn();
   } catch (e) {
     console.error(`  ❌ ${name}`);
     console.error(`     ${e.message}`);
     failed++;
+    return;
+  }
+
+  if (result instanceof Promise) {
+    _asyncTests.push(
+      result.then(
+        () => { console.log(`  ✅ ${name}`); passed++; },
+        (e) => { console.error(`  ❌ ${name}`); console.error(`     ${e.message}`); failed++; },
+      ),
+    );
+  } else {
+    console.log(`  ✅ ${name}`);
+    passed++;
   }
 }
 
@@ -846,6 +860,9 @@ suite("Worker — 未知路由", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // 汇总
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Wait for all async test bodies to complete before reporting results.
+await Promise.allSettled(_asyncTests);
 
 console.log(`\n${"─".repeat(50)}`);
 if (failed === 0) {
