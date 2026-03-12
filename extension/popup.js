@@ -255,8 +255,9 @@ async function publishToGist(icsContent, filename) {
   await chrome.storage.local.set({ github_gist_id: gist.id });
 
   // 构造不含 commit SHA 的稳定订阅 URL
+  const encodedFilename = encodeURIComponent(filename);
   const subscriptionUrl =
-    `https://gist.githubusercontent.com/${gist.owner.login}/${gist.id}/raw/${filename}`;
+    `https://gist.githubusercontent.com/${gist.owner.login}/${gist.id}/raw/${encodedFilename}`;
   return subscriptionUrl;
 }
 
