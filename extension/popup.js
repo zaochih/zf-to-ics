@@ -31,6 +31,7 @@ const scheduleBadge = document.getElementById("schedule-badge");
 const scheduleBadgeTx = document.getElementById("schedule-badge-tx");
 const hintBox = document.getElementById("hint-box");
 const btnGenerate = document.getElementById("btn-generate");
+const btnDownload = document.getElementById("btn-download");
 const resultEl = document.getElementById("result");
 
 // GitHub Gist DOM 引用
@@ -191,6 +192,28 @@ async function publishToGist(icsContent, filename) {
 
   let resp;
   if (github_gist_id) {
+    // 更新前先检查内容是否有变更，避免创建空提交
+    const checkResp = await fetch(
+      `https://api.github.com/gists/${github_gist_id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${github_token}`,
+          "User-Agent": "zf-to-ics",
+        },
+      },
+    );
+    if (checkResp.ok) {
+      const currentGist = await checkResp.json();
+      const currentFile = currentGist.files?.[filename];
+      if (
+        currentFile &&
+        !currentFile.truncated &&
+        currentFile.content === icsContent
+      ) {
+        return null; // 没有可提交的变更
+      }
+    }
+
     resp = await fetch(`https://api.github.com/gists/${github_gist_id}`, {
       method: "PATCH",
       headers: {
@@ -266,6 +289,12 @@ btnGithubDisconnect.addEventListener("click", async () => {
   await refreshGithubUI();
 });
 
+btnDownload.addEventListener("click", () => {
+  if (lastIcsContent && lastIcsFilename) {
+    downloadICS(lastIcsContent, lastIcsFilename);
+  }
+});
+
 btnGistPublish.addEventListener("click", async () => {
   if (!lastIcsContent || !lastIcsFilename) {
     showGistResult("error", "请先生成 ICS 文件再发布。");
@@ -275,8 +304,12 @@ btnGistPublish.addEventListener("click", async () => {
   btnGistPublish.disabled = true;
   btnGistPublish.textContent = "正在发布…";
   try {
-    const subscriptionUrl = await publishToGist(lastIcsContent, lastIcsFilename);
-    gistUrlInput.value = subscriptionUrl;
+    const result = await publishToGist(lastIcsContent, lastIcsFilename);
+    if (result === null) {
+      showGistResult("warn", "没有可提交的变更，Gist 内容未修改。");
+      return;
+    }
+    gistUrlInput.value = result;
     gistUrlRow.style.display = "flex";
     showGistResult(
       "success",
@@ -392,7 +425,7 @@ btnGenerate.addEventListener("click", async () => {
   } catch (e) {
     showResult("error", "无法访问当前标签页：" + e.message);
     btnGenerate.disabled = false;
-    btnGenerate.textContent = "获取课表并生成 .ics";
+    btnGenerate.textContent = "获取课表并生成 ICS";
     return;
   }
 
@@ -404,7 +437,7 @@ btnGenerate.addEventListener("click", async () => {
   } catch (e) {
     showResult("error", "获取课表数据失败：" + e.message);
     btnGenerate.disabled = false;
-    btnGenerate.textContent = "获取课表并生成 .ics";
+    btnGenerate.textContent = "获取课表并生成 ICS";
     return;
   }
 
@@ -440,7 +473,7 @@ btnGenerate.addEventListener("click", async () => {
   if (kbList.length === 0) {
     showResult("error", "该学期课表为空，请确认学年/学期参数是否正确。");
     btnGenerate.disabled = false;
-    btnGenerate.textContent = "获取课表并生成 .ics";
+    btnGenerate.textContent = "获取课表并生成 ICS";
     return;
   }
 
@@ -465,11 +498,10 @@ btnGenerate.addEventListener("click", async () => {
   const endLabel = endDate ? `_截至${fmtDateBasic(endDate)}` : "";
   const filename = `${studentName}_${xnm}-${parseInt(xnm) + 1}_${semLabel}${endLabel}.ics`;
 
-  downloadICS(icsContent, filename);
-
-  // 保存 ICS 内容供「发布到 Gist」使用
+  // 保存 ICS 内容供「下载」和「发布到 Gist」使用
   lastIcsContent = icsContent;
   lastIcsFilename = filename;
+  btnDownload.disabled = false;
   btnGistPublish.disabled = false;
 
   const totalEvents = (icsContent.match(/BEGIN:VEVENT/g) ?? []).length;
@@ -479,13 +511,12 @@ btnGenerate.addEventListener("click", async () => {
 
   showResult(
     "success",
-    `✅ 已生成 <strong>${totalEvents}</strong> 个课程事件${scheduleNote}，` +
-      `文件「${filename}」已下载。` +
+    `✅ 已生成 <strong>${totalEvents}</strong> 个课程事件${scheduleNote}。` +
       (endDate
         ? ``
         : `<br/><small style="opacity:.7">未设截止日期，已生成整个学期。</small>`),
   );
 
   btnGenerate.disabled = false;
-  btnGenerate.textContent = "获取课表并生成 .ics";
+  btnGenerate.textContent = "获取课表并生成 ICS";
 });
