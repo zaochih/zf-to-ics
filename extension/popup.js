@@ -6,6 +6,7 @@
  *   2. 将检测结果及预填参数渲染到表单
  *   3. 用户点击「生成」后，向 content script 请求 API 数据
  *   4. 解析节次时间、周次、星期，生成标准 RFC 5545 .ics 文件并触发下载
+ *   5. 可选：通过 GitHub OAuth 将生成的 .ics 发布到 GitHub Gist 供订阅
  */
 
 import {
@@ -13,6 +14,11 @@ import {
   parseWeeks, parseJcs, mergeKbList, buildPeriodMap,
   buildDescription, buildLocation, escapeIcsText, foldLine, generateICS,
 } from "./lib.js";
+
+// ─── GitHub Gist 配置 ─────────────────────────────────────────────────────────
+// 部署自己的 Cloudflare Worker 后，将此处替换为你的 Worker URL
+// 参见 /backend/wrangler.toml
+const WORKER_ORIGIN = "https://zf-to-ics.YOUR_SUBDOMAIN.workers.dev";
 
 // ─── DOM 引用 ────────────────────────────────────────────────────────────────
 
@@ -31,6 +37,17 @@ const scheduleBadgeTx = document.getElementById("schedule-badge-tx");
 const hintBox = document.getElementById("hint-box");
 const btnGenerate = document.getElementById("btn-generate");
 const resultEl = document.getElementById("result");
+
+// GitHub Gist DOM 引用
+const githubDisconnected = document.getElementById("github-disconnected");
+const githubConnected = document.getElementById("github-connected");
+const githubUserEl = document.getElementById("github-user");
+const btnGithubConnect = document.getElementById("btn-github-connect");
+const btnGithubDisconnect = document.getElementById("btn-github-disconnect");
+const btnGistPublish = document.getElementById("btn-gist-publish");
+const gistUrlRow = document.getElementById("gist-url-row");
+const gistUrlInput = document.getElementById("gist-url");
+const gistResultEl = document.getElementById("gist-result");
 
 // ─── 状态工具 ────────────────────────────────────────────────────────────────
 
@@ -95,6 +112,216 @@ function sendToContent(tabId, message) {
   });
 }
 
+// ─── GitHub OAuth & Gist ──────────────────────────────────────────────────────
+
+/** 最近一次生成的 ICS 内容和文件名（供发布到 Gist 使用） */
+let lastIcsContent = null;
+let lastIcsFilename = null;
+
+function showGistResult(type, html) {
+  gistResultEl.className = type;
+  gistResultEl.innerHTML = html;
+  gistResultEl.style.display = "block";
+}
+
+function hideGistResult() {
+  gistResultEl.style.display = "none";
+}
+
+/** 根据 chrome.storage.local 里是否存有 token，切换已连接/未连接界面 */
+async function refreshGithubUI() {
+  const { github_login } = await chrome.storage.local.get("github_login");
+  if (github_login) {
+    githubUserEl.textContent = github_login;
+    githubDisconnected.style.display = "none";
+    githubConnected.style.display = "flex";
+    btnGistPublish.disabled = !lastIcsContent;
+  } else {
+    githubDisconnected.style.display = "block";
+    githubConnected.style.display = "none";
+  }
+}
+
+/**
+ * 使用 chrome.identity.launchWebAuthFlow 发起 GitHub OAuth 流程。
+ * 扩展将 ext_id 和随机 nonce 传给 Cloudflare Worker，Worker 完成
+ * client_secret 的保密交换后把 access_token 写回 chromiumapp.org URL，
+ * Chrome 拦截该 URL 并将其作为 responseUrl 返回给扩展。
+ */
+async function connectGitHub() {
+  const extId = chrome.runtime.id;
+
+  // 生成 16 字节密码学随机 nonce（用于 CSRF 防护）
+  const nonceBytes = crypto.getRandomValues(new Uint8Array(16));
+  const nonce = Array.from(nonceBytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  const authUrl =
+    `${WORKER_ORIGIN}/oauth/github/authorize?` +
+    new URLSearchParams({ ext_id: extId, state: nonce });
+
+  const responseUrl = await new Promise((resolve, reject) => {
+    chrome.identity.launchWebAuthFlow(
+      { url: authUrl, interactive: true },
+      (url) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+        } else {
+          resolve(url);
+        }
+      },
+    );
+  });
+
+  const params = new URLSearchParams(new URL(responseUrl).search);
+
+  // 验证 state（防 CSRF）
+  if (params.get("state") !== nonce) {
+    throw new Error("State 不匹配，请重试");
+  }
+
+  const token = params.get("access_token");
+  if (!token) throw new Error("未获得 access_token");
+
+  // 获取 GitHub 用户名
+  const userResp = await fetch("https://api.github.com/user", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "User-Agent": "zf-to-ics",
+    },
+  });
+  if (!userResp.ok) throw new Error("获取 GitHub 用户信息失败");
+  const user = await userResp.json();
+
+  await chrome.storage.local.set({
+    github_token: token,
+    github_login: user.login,
+  });
+  return user.login;
+}
+
+/**
+ * 将 ICS 内容发布到 GitHub Gist。
+ * - 首次发布：创建新 Gist，将 gist_id 存入 chrome.storage.local
+ * - 再次发布同文件名：更新同一 Gist，订阅链接保持不变
+ *
+ * 返回稳定的 raw 订阅 URL（不含 commit SHA，始终指向最新版本）。
+ */
+async function publishToGist(icsContent, filename) {
+  const { github_token, github_gist_id } = await chrome.storage.local.get([
+    "github_token",
+    "github_gist_id",
+  ]);
+  if (!github_token) throw new Error("请先连接 GitHub");
+
+  const gistPayload = {
+    description: "正方教务课表 iCal 订阅 · 由 zf-to-ics 生成",
+    public: true,
+    files: { [filename]: { content: icsContent } },
+  };
+
+  let resp;
+  if (github_gist_id) {
+    resp = await fetch(`https://api.github.com/gists/${github_gist_id}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${github_token}`,
+        "Content-Type": "application/json",
+        "User-Agent": "zf-to-ics",
+      },
+      body: JSON.stringify(gistPayload),
+    });
+  } else {
+    resp = await fetch("https://api.github.com/gists", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${github_token}`,
+        "Content-Type": "application/json",
+        "User-Agent": "zf-to-ics",
+      },
+      body: JSON.stringify(gistPayload),
+    });
+  }
+
+  if (resp.status === 401) {
+    // Token 已过期或被撤销，清除本地凭证
+    await chrome.storage.local.remove([
+      "github_token",
+      "github_login",
+      "github_gist_id",
+    ]);
+    await refreshGithubUI();
+    throw new Error("GitHub token 已失效，请重新连接");
+  }
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(`GitHub API 错误：${err.message ?? resp.status}`);
+  }
+
+  const gist = await resp.json();
+  await chrome.storage.local.set({ github_gist_id: gist.id });
+
+  // 构造不含 commit SHA 的稳定订阅 URL
+  const subscriptionUrl =
+    `https://gist.githubusercontent.com/${gist.owner.login}/${gist.id}/raw/${filename}`;
+  return subscriptionUrl;
+}
+
+// ─── GitHub 按钮事件 ──────────────────────────────────────────────────────────
+
+btnGithubConnect.addEventListener("click", async () => {
+  btnGithubConnect.disabled = true;
+  btnGithubConnect.textContent = "正在授权…";
+  hideGistResult();
+  try {
+    const login = await connectGitHub();
+    await refreshGithubUI();
+    showGistResult("success", `✅ 已连接 GitHub 账号：${login}`);
+  } catch (e) {
+    showGistResult("error", "连接 GitHub 失败：" + e.message);
+  } finally {
+    btnGithubConnect.disabled = false;
+    btnGithubConnect.textContent = "连接 GitHub 以发布 iCal 订阅链接";
+  }
+});
+
+btnGithubDisconnect.addEventListener("click", async () => {
+  await chrome.storage.local.remove([
+    "github_token",
+    "github_login",
+    "github_gist_id",
+  ]);
+  gistUrlRow.style.display = "none";
+  hideGistResult();
+  await refreshGithubUI();
+});
+
+btnGistPublish.addEventListener("click", async () => {
+  if (!lastIcsContent || !lastIcsFilename) {
+    showGistResult("error", "请先生成 ICS 文件再发布。");
+    return;
+  }
+  hideGistResult();
+  btnGistPublish.disabled = true;
+  btnGistPublish.textContent = "正在发布…";
+  try {
+    const subscriptionUrl = await publishToGist(lastIcsContent, lastIcsFilename);
+    gistUrlInput.value = subscriptionUrl;
+    gistUrlRow.style.display = "flex";
+    showGistResult(
+      "success",
+      `✅ 已发布到 Gist。复制上方链接到日历应用（Apple 日历、Google Calendar 等）即可订阅。`,
+    );
+  } catch (e) {
+    showGistResult("error", "发布失败：" + e.message);
+  } finally {
+    btnGistPublish.disabled = false;
+    btnGistPublish.textContent = "发布 / 更新 Gist 订阅链接";
+  }
+});
+
 // ─── 表单联动 ─────────────────────────────────────────────────────────────────
 
 function syncDefaults() {
@@ -149,6 +376,8 @@ inpXnm.addEventListener("change", syncDefaults);
 
   hintBox.textContent =
     "请填写「第 1 周周一日期」（即开学第一天）。留空截止日期则生成整个学期的 ICS。";
+
+  await refreshGithubUI();
 })();
 
 // ─── 生成按钮 ─────────────────────────────────────────────────────────────────
@@ -269,6 +498,11 @@ btnGenerate.addEventListener("click", async () => {
   const filename = `${studentName}_${xnm}-${parseInt(xnm) + 1}_${semLabel}${endLabel}.ics`;
 
   downloadICS(icsContent, filename);
+
+  // 保存 ICS 内容供「发布到 Gist」使用
+  lastIcsContent = icsContent;
+  lastIcsFilename = filename;
+  btnGistPublish.disabled = false;
 
   const totalEvents = (icsContent.match(/BEGIN:VEVENT/g) ?? []).length;
   const scheduleNote = periodMap2

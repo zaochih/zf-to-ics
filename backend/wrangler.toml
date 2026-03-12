@@ -1,0 +1,10 @@
+name = "zf-to-ics-oauth"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+
+# Set secrets with:
+#   wrangler secret put GITHUB_CLIENT_ID
+#   wrangler secret put GITHUB_CLIENT_SECRET
+#
+# Or configure them in the Cloudflare dashboard:
+#   Workers & Pages → zf-to-ics-oauth → Settings → Variables & Secrets
