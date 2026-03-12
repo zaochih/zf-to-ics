@@ -1,4 +1,4 @@
-# 正方教务课表转 ICS
+<img width="1624" height="983" alt="image" src="https://github.com/user-attachments/assets/0a4d6fa5-94e0-4aa9-9e23-7371cccf32ed" /># 正方教务课表转 ICS
 
 将正方软件教务系统（V9）的课表导出为标准 `.ics` 日历文件，可导入 Apple 日历、Google Calendar、Outlook 等任意支持 iCalendar 格式的应用。
 
@@ -19,7 +19,7 @@
 
 ### 从 Chrome 网上应用店
 
-// TODO
+https://chromewebstore.google.com/detail/chnhhdhbciemnjaohomeohlklfdlmhbl
 
 ### 从 Microsoft Edge 插件商店
 
