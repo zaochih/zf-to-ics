@@ -4,11 +4,17 @@ on:
   push:
     branches: ["**"]
     paths:
+      - ".github/workflows/test.yml"
       - "extension/lib.js"
+      - "backend/worker.js"
+      - "test.mjs"
   pull_request:
     branches: ["**"]
     paths:
+      - ".github/workflows/test.yml"
       - "extension/lib.js"
+      - "backend/worker.js"
+      - "test.mjs"
 
 jobs:
   test:
