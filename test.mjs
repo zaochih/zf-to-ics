@@ -22,16 +22,30 @@ import {
 
 let passed = 0;
 let failed = 0;
+/** Promises for async test bodies — awaited before printing summary. */
+const _asyncTests = [];
 
 function test(name, fn) {
+  let result;
   try {
-    fn();
-    console.log(`  ✅ ${name}`);
-    passed++;
+    result = fn();
   } catch (e) {
     console.error(`  ❌ ${name}`);
     console.error(`     ${e.message}`);
     failed++;
+    return;
+  }
+
+  if (result instanceof Promise) {
+    _asyncTests.push(
+      result.then(
+        () => { console.log(`  ✅ ${name}`); passed++; },
+        (e) => { console.error(`  ❌ ${name}`); console.error(`     ${e.message}`); failed++; },
+      ),
+    );
+  } else {
+    console.log(`  ✅ ${name}`);
+    passed++;
   }
 }
 
@@ -673,8 +687,182 @@ suite("综合冒烟 — 多门课 + 复杂周次", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Cloudflare Worker — OAuth 路由单元测试
+// ─────────────────────────────────────────────────────────────────────────────
+
+import worker from "./backend/worker.js";
+
+const MOCK_ENV = {
+  GITHUB_CLIENT_ID: "test_client_id",
+  GITHUB_CLIENT_SECRET: "test_client_secret",
+};
+
+function makeRequest(path) {
+  return new Request(`https://worker.example.com${path}`);
+}
+
+suite("Worker — GET /oauth/github/authorize", () => {
+  test("缺少 ext_id 时返回 400", async () => {
+    const resp = await worker.fetch(
+      makeRequest("/oauth/github/authorize?state=nonce123"),
+      MOCK_ENV,
+    );
+    assert.equal(resp.status, 400);
+  });
+
+  test("缺少 state 时返回 400", async () => {
+    const resp = await worker.fetch(
+      makeRequest("/oauth/github/authorize?ext_id=abc"),
+      MOCK_ENV,
+    );
+    assert.equal(resp.status, 400);
+  });
+
+  test("参数齐全时重定向到 GitHub（302）", async () => {
+    const resp = await worker.fetch(
+      makeRequest("/oauth/github/authorize?ext_id=myextid&state=randomnonce"),
+      MOCK_ENV,
+    );
+    assert.equal(resp.status, 302);
+    const location = resp.headers.get("Location");
+    assert.ok(location.startsWith("https://github.com/login/oauth/authorize?"), "应跳转到 GitHub");
+    assert.ok(location.includes("client_id=test_client_id"), "应包含 client_id");
+    assert.ok(location.includes("scope=gist"), "scope 应为 gist");
+  });
+
+  test("state 中编码了 ext_id 和 nonce", async () => {
+    const resp = await worker.fetch(
+      makeRequest("/oauth/github/authorize?ext_id=myextid&state=randomnonce"),
+      MOCK_ENV,
+    );
+    const location = resp.headers.get("Location");
+    const params = new URLSearchParams(new URL(location).search);
+    const payload = JSON.parse(atob(params.get("state")));
+    assert.equal(payload.ext_id, "myextid");
+    assert.equal(payload.nonce, "randomnonce");
+  });
+
+  test("redirect_uri 指向 /oauth/github/callback", async () => {
+    const resp = await worker.fetch(
+      makeRequest("/oauth/github/authorize?ext_id=e&state=s"),
+      MOCK_ENV,
+    );
+    const location = resp.headers.get("Location");
+    const params = new URLSearchParams(new URL(location).search);
+    assert.ok(
+      params.get("redirect_uri").endsWith("/oauth/github/callback"),
+      "redirect_uri 应指向 callback 路由",
+    );
+  });
+});
+
+suite("Worker — GET /oauth/github/callback", () => {
+  test("缺少 code 时返回 400", async () => {
+    const state = btoa(JSON.stringify({ ext_id: "e", nonce: "n" }));
+    const resp = await worker.fetch(
+      makeRequest(`/oauth/github/callback?state=${encodeURIComponent(state)}`),
+      MOCK_ENV,
+    );
+    assert.equal(resp.status, 400);
+  });
+
+  test("缺少 state 时返回 400", async () => {
+    const resp = await worker.fetch(
+      makeRequest("/oauth/github/callback?code=abc"),
+      MOCK_ENV,
+    );
+    assert.equal(resp.status, 400);
+  });
+
+  test("state 格式非法时返回 400", async () => {
+    const resp = await worker.fetch(
+      makeRequest("/oauth/github/callback?code=abc&state=notvalidbase64!!!"),
+      MOCK_ENV,
+    );
+    assert.equal(resp.status, 400);
+  });
+
+  test("GitHub token 交换成功后重定向到 chromiumapp.org", async () => {
+    // 用 globalThis.fetch 的临时 mock 模拟 GitHub token 端点
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async (url, _opts) => {
+        if (String(url).includes("access_token")) {
+          return new Response(
+            JSON.stringify({ access_token: "ghp_test_token", token_type: "bearer" }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return originalFetch(url, _opts);
+      };
+
+      const state = btoa(JSON.stringify({ ext_id: "myextid", nonce: "mynonce" }));
+      const resp = await worker.fetch(
+        makeRequest(`/oauth/github/callback?code=authcode&state=${encodeURIComponent(state)}`),
+        MOCK_ENV,
+      );
+
+      assert.equal(resp.status, 302);
+      const location = resp.headers.get("Location");
+      assert.ok(
+        location.startsWith("https://myextid.chromiumapp.org/"),
+        "应重定向到 chromiumapp.org",
+      );
+      const params = new URLSearchParams(new URL(location).search);
+      assert.equal(params.get("access_token"), "ghp_test_token", "应携带 access_token");
+      assert.equal(params.get("state"), "mynonce", "应携带原始 nonce");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("GitHub 返回 error 时回复 400", async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async (url, _opts) => {
+        if (String(url).includes("access_token")) {
+          return new Response(
+            JSON.stringify({ error: "bad_verification_code", error_description: "The code passed is incorrect" }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return originalFetch(url, _opts);
+      };
+
+      const state = btoa(JSON.stringify({ ext_id: "e", nonce: "n" }));
+      const resp = await worker.fetch(
+        makeRequest(`/oauth/github/callback?code=badcode&state=${encodeURIComponent(state)}`),
+        MOCK_ENV,
+      );
+
+      assert.equal(resp.status, 400);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+suite("Worker — 未知路由", () => {
+  test("GET / 返回 404", async () => {
+    const resp = await worker.fetch(makeRequest("/"), MOCK_ENV);
+    assert.equal(resp.status, 404);
+  });
+
+  test("POST /oauth/github/authorize 返回 404", async () => {
+    const resp = await worker.fetch(
+      new Request("https://worker.example.com/oauth/github/authorize", { method: "POST" }),
+      MOCK_ENV,
+    );
+    assert.equal(resp.status, 404);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 汇总
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Wait for all async test bodies to complete before reporting results.
+await Promise.allSettled(_asyncTests);
 
 console.log(`\n${"─".repeat(50)}`);
 if (failed === 0) {

@@ -3,7 +3,10 @@
   "name": "正方教务课表转 ICS",
   "version": "1.0.0",
   "description": "将正方软件教务系统课表导出为 .ics 日历文件",
-  "permissions": ["tabs"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["tabs", "identity", "storage"],
   "host_permissions": ["*://*.edu.cn/*"],
   "action": {
     "default_popup": "popup.html",
