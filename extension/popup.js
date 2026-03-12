@@ -45,6 +45,8 @@ const gistUrlRow = document.getElementById("gist-url-row");
 const gistUrlInput = document.getElementById("gist-url");
 const gistResultEl = document.getElementById("gist-result");
 
+gistUrlInput.addEventListener("click", () => gistUrlInput.select());
+
 // ─── 状态工具 ────────────────────────────────────────────────────────────────
 
 function setStatus(state, text) {
