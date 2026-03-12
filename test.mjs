@@ -771,54 +771,60 @@ suite("Worker — GET /oauth/github/callback", () => {
   test("GitHub token 交换成功后重定向到 chromiumapp.org", async () => {
     // 用 globalThis.fetch 的临时 mock 模拟 GitHub token 端点
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async (url, _opts) => {
-      if (String(url).includes("access_token")) {
-        return new Response(
-          JSON.stringify({ access_token: "ghp_test_token", token_type: "bearer" }),
-          { headers: { "Content-Type": "application/json" } },
-        );
-      }
-      return originalFetch(url, _opts);
-    };
+    try {
+      globalThis.fetch = async (url, _opts) => {
+        if (String(url).includes("access_token")) {
+          return new Response(
+            JSON.stringify({ access_token: "ghp_test_token", token_type: "bearer" }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return originalFetch(url, _opts);
+      };
 
-    const state = btoa(JSON.stringify({ ext_id: "myextid", nonce: "mynonce" }));
-    const resp = await worker.fetch(
-      makeRequest(`/oauth/github/callback?code=authcode&state=${encodeURIComponent(state)}`),
-      MOCK_ENV,
-    );
-    globalThis.fetch = originalFetch;
+      const state = btoa(JSON.stringify({ ext_id: "myextid", nonce: "mynonce" }));
+      const resp = await worker.fetch(
+        makeRequest(`/oauth/github/callback?code=authcode&state=${encodeURIComponent(state)}`),
+        MOCK_ENV,
+      );
 
-    assert.equal(resp.status, 302);
-    const location = resp.headers.get("Location");
-    assert.ok(
-      location.startsWith("https://myextid.chromiumapp.org/"),
-      "应重定向到 chromiumapp.org",
-    );
-    const params = new URLSearchParams(new URL(location).search);
-    assert.equal(params.get("access_token"), "ghp_test_token", "应携带 access_token");
-    assert.equal(params.get("state"), "mynonce", "应携带原始 nonce");
+      assert.equal(resp.status, 302);
+      const location = resp.headers.get("Location");
+      assert.ok(
+        location.startsWith("https://myextid.chromiumapp.org/"),
+        "应重定向到 chromiumapp.org",
+      );
+      const params = new URLSearchParams(new URL(location).search);
+      assert.equal(params.get("access_token"), "ghp_test_token", "应携带 access_token");
+      assert.equal(params.get("state"), "mynonce", "应携带原始 nonce");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   test("GitHub 返回 error 时回复 400", async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async (url, _opts) => {
-      if (String(url).includes("access_token")) {
-        return new Response(
-          JSON.stringify({ error: "bad_verification_code", error_description: "The code passed is incorrect" }),
-          { headers: { "Content-Type": "application/json" } },
-        );
-      }
-      return originalFetch(url, _opts);
-    };
+    try {
+      globalThis.fetch = async (url, _opts) => {
+        if (String(url).includes("access_token")) {
+          return new Response(
+            JSON.stringify({ error: "bad_verification_code", error_description: "The code passed is incorrect" }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+        return originalFetch(url, _opts);
+      };
 
-    const state = btoa(JSON.stringify({ ext_id: "e", nonce: "n" }));
-    const resp = await worker.fetch(
-      makeRequest(`/oauth/github/callback?code=badcode&state=${encodeURIComponent(state)}`),
-      MOCK_ENV,
-    );
-    globalThis.fetch = originalFetch;
+      const state = btoa(JSON.stringify({ ext_id: "e", nonce: "n" }));
+      const resp = await worker.fetch(
+        makeRequest(`/oauth/github/callback?code=badcode&state=${encodeURIComponent(state)}`),
+        MOCK_ENV,
+      );
 
-    assert.equal(resp.status, 400);
+      assert.equal(resp.status, 400);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
 
