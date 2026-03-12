@@ -18,7 +18,7 @@ import {
 // ─── GitHub Gist 配置 ─────────────────────────────────────────────────────────
 // 部署自己的 Cloudflare Worker 后，将此处替换为你的 Worker URL
 // 参见 /backend/wrangler.toml
-const WORKER_ORIGIN = "https://zf-to-ics.YOUR_SUBDOMAIN.workers.dev";
+const WORKER_ORIGIN = "https://zics-api.zaochih.com";
 
 // ─── DOM 引用 ────────────────────────────────────────────────────────────────
 
