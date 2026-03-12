@@ -5,14 +5,10 @@ on:
     branches: ["**"]
     paths:
       - "extension/lib.js"
-      - "test.mjs"
-      - "backend/worker.js"
   pull_request:
     branches: ["**"]
     paths:
       - "extension/lib.js"
-      - "test.mjs"
-      - "backend/worker.js"
 
 jobs:
   test:
