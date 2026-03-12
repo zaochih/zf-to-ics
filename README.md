@@ -23,7 +23,7 @@
 
 ### 从 Microsoft Edge 插件商店
 
-// TODO
+https://microsoftedge.microsoft.com/addons/detail/lpfdidogfdkdnidleioieajgdofajlna
 
 ### 从 GitHub 源码安装
 
