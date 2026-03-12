@@ -15,11 +15,6 @@ import {
   buildDescription, buildLocation, escapeIcsText, foldLine, generateICS,
 } from "./lib.js";
 
-// ─── GitHub Gist 配置 ─────────────────────────────────────────────────────────
-// 部署自己的 Cloudflare Worker 后，将此处替换为你的 Worker URL
-// 参见 /backend/wrangler.toml
-const WORKER_ORIGIN = "https://zics-api.zaochih.com";
-
 // ─── DOM 引用 ────────────────────────────────────────────────────────────────
 
 const dot = document.getElementById("dot");
@@ -143,10 +138,11 @@ async function refreshGithubUI() {
 }
 
 /**
- * 使用 chrome.identity.launchWebAuthFlow 发起 GitHub OAuth 流程。
- * 扩展将 ext_id 和随机 nonce 传给 Cloudflare Worker，Worker 完成
- * client_secret 的保密交换后把 access_token 写回 chromiumapp.org URL，
- * Chrome 拦截该 URL 并将其作为 responseUrl 返回给扩展。
+ * 将 GitHub OAuth 流程委托给背景服务工作者执行。
+ *
+ * popup 在 launchWebAuthFlow 打开授权窗口后会因失去焦点而被 Chrome 关闭，
+ * 导致 launchWebAuthFlow 的回调永远无法执行。将流程移至背景服务工作者
+ * 可避免此问题——服务工作者不依赖 popup 的生命周期。
  */
 async function connectGitHub() {
   const extId = chrome.runtime.id;
@@ -157,48 +153,20 @@ async function connectGitHub() {
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 
-  const authUrl =
-    `${WORKER_ORIGIN}/oauth/github/authorize?` +
-    new URLSearchParams({ ext_id: extId, state: nonce });
-
-  const responseUrl = await new Promise((resolve, reject) => {
-    chrome.identity.launchWebAuthFlow(
-      { url: authUrl, interactive: true },
-      (url) => {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(
+      { type: "GITHUB_AUTH_START", extId, nonce },
+      (resp) => {
         if (chrome.runtime.lastError) {
           reject(new Error(chrome.runtime.lastError.message));
+        } else if (!resp.ok) {
+          reject(new Error(resp.error));
         } else {
-          resolve(url);
+          resolve(resp.login);
         }
       },
     );
   });
-
-  const params = new URLSearchParams(new URL(responseUrl).search);
-
-  // 验证 state（防 CSRF）
-  if (params.get("state") !== nonce) {
-    throw new Error("State 不匹配，请重试");
-  }
-
-  const token = params.get("access_token");
-  if (!token) throw new Error("未获得 access_token");
-
-  // 获取 GitHub 用户名
-  const userResp = await fetch("https://api.github.com/user", {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "User-Agent": "zf-to-ics",
-    },
-  });
-  if (!userResp.ok) throw new Error("获取 GitHub 用户信息失败");
-  const user = await userResp.json();
-
-  await chrome.storage.local.set({
-    github_token: token,
-    github_login: user.login,
-  });
-  return user.login;
 }
 
 /**
