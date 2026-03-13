@@ -75,7 +75,8 @@ function guessCurrentTerm() {
 
 // ─── 辅助：探测 API 根路径 ─────────────────────────────────────────────────────
 //
-// 发送不带凭据的请求，跟随重定向，从登录页 URL 中提取 API 根路径。
+// 不带凭据请求当前页面，跟随重定向，从登录页 URL 中提取 API 根路径。
+// 使用当前页面而非 origin 根路径，避免部分院校根路径返回 404。
 // 例如：
 //   fjsmu: 重定向到 .../jwglxt/xtgl/login_slogin.html → root = .../jwglxt
 //   hbfs:  重定向到 .../xtgl/login_slogin.html        → root = (origin only)
@@ -87,7 +88,7 @@ function guessCurrentTerm() {
 async function detectApiBase() {
   const LOGIN_SUFFIX = "/xtgl/login_slogin.html";
   try {
-    const resp = await fetch(window.location.origin + "/", {
+    const resp = await fetch(window.location.href, {
       credentials: "omit",
       redirect: "follow",
     });

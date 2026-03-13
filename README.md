@@ -80,7 +80,7 @@ https://chromewebstore.google.com/detail/chnhhdhbciemnjaohomeohlklfdlmhbl
 
 所有请求均携带 Cookie（`credentials: include`），依赖用户已登录的会话。
 
-根路径探测方式：向站点根路径发送不带 Cookie 的请求，跟随重定向后从登录页 URL（`<apiBase>/xtgl/login_slogin.html`）中反推 `apiBase`；探测失败则回退到 `window.location.origin`。
+根路径探测方式：向当前页面发送不带 Cookie 的请求，跟随重定向后从登录页 URL（`<apiBase>/xtgl/login_slogin.html`）中反推 `apiBase`；探测失败则回退到 `window.location.origin`。
 
 ### 双套作息逻辑
 
