@@ -249,8 +249,9 @@ export function buildLocation(course, showCampus) {
  */
 export function parseApiBase(loginUrl) {
   const suffix = "/xtgl/login_slogin.html";
-  const idx = String(loginUrl ?? "").indexOf(suffix);
-  return idx !== -1 ? loginUrl.slice(0, idx) : null;
+  const s = String(loginUrl ?? "");
+  const idx = s.indexOf(suffix);
+  return idx !== -1 ? s.slice(0, idx) : null;
 }
 
 // ─── ICS 字符串工具 ───────────────────────────────────────────────────────────

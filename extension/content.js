@@ -91,6 +91,7 @@ async function detectApiBase() {
     const resp = await fetch(window.location.href, {
       credentials: "omit",
       redirect: "follow",
+      cache: "no-store",
     });
     const idx = resp.url.indexOf(LOGIN_SUFFIX);
     if (idx !== -1) {
