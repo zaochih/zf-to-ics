@@ -71,12 +71,16 @@ https://chromewebstore.google.com/detail/chnhhdhbciemnjaohomeohlklfdlmhbl
 
 ### 涉及的 API 端点
 
+所有请求均通过运行时探测到的 API 根路径（`apiBase`）构造；不同学校的根路径可能不同（例如三明学院为 `https://jwxxt.fjsmu.edu.cn/jwglxt`，湖北某校为 `http://jwxt1.hbfs.edu.cn`）。
+
 | 端点 | 用途 |
 |---|---|
-| `POST /jwglxt/kbcx/xskbcx_cxXsgrkb.html` | 学生个人课表（`kbList`、`xsxx`） |
-| `POST /jwglxt/kbcx/xskbcx_cxRjc.html` | 节次时间表（每节的起止时间） |
+| `POST <apiBase>/kbcx/xskbcx_cxXsgrkb.html` | 学生个人课表（`kbList`、`xsxx`） |
+| `POST <apiBase>/kbcx/xskbcx_cxRjc.html` | 节次时间表（每节的起止时间） |
 
 所有请求均携带 Cookie（`credentials: include`），依赖用户已登录的会话。
+
+根路径探测方式：向当前页面发送不带 Cookie 的请求，跟随重定向后从登录页 URL（`<apiBase>/xtgl/login_slogin.html`）中反推 `apiBase`；探测失败则回退到 `window.location.origin`。
 
 ### 双套作息逻辑
 

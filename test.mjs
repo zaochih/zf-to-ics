@@ -13,7 +13,7 @@ import {
   fmtDateBasic, fmtDateInput, parseDateInput,
   parseWeeks, parseJcs, buildPeriodMap,
   buildDescription, buildLocation, escapeIcsText,
-  foldLine, generateICS,
+  foldLine, generateICS, parseApiBase,
 } from "./extension/lib.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -683,6 +683,46 @@ suite("综合冒烟 — 多门课 + 复杂周次", () => {
       unfolded.includes("25计算机科学与技术1班\\;25计算机科学与技术2班"),
       "教学班组成中的分号应被转义为 \\;",
     );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// parseApiBase — API 根路径提取
+// ─────────────────────────────────────────────────────────────────────────────
+
+suite("parseApiBase", () => {
+  test("fjsmu 带 /jwglxt 前缀", () => {
+    assert.equal(
+      parseApiBase("https://jwxxt.fjsmu.edu.cn/jwglxt/xtgl/login_slogin.html"),
+      "https://jwxxt.fjsmu.edu.cn/jwglxt",
+    );
+  });
+
+  test("hbfs 无路径前缀", () => {
+    assert.equal(
+      parseApiBase("http://jwxt1.hbfs.edu.cn/xtgl/login_slogin.html"),
+      "http://jwxt1.hbfs.edu.cn",
+    );
+  });
+
+  test("带查询参数时仍正确提取", () => {
+    assert.equal(
+      parseApiBase("https://jwxxt.fjsmu.edu.cn/jwglxt/xtgl/login_slogin.html?url=/jwglxt/"),
+      "https://jwxxt.fjsmu.edu.cn/jwglxt",
+    );
+  });
+
+  test("不含登录页后缀时返回 null", () => {
+    assert.equal(parseApiBase("https://jwxxt.fjsmu.edu.cn/jwglxt/"), null);
+  });
+
+  test("空字符串返回 null", () => {
+    assert.equal(parseApiBase(""), null);
+  });
+
+  test("null/undefined 返回 null", () => {
+    assert.equal(parseApiBase(null), null);
+    assert.equal(parseApiBase(undefined), null);
   });
 });
 

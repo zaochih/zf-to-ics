@@ -73,6 +73,36 @@ function guessCurrentTerm() {
   return { xnm: String(xnm), xqm };
 }
 
+// ─── 辅助：探测 API 根路径 ─────────────────────────────────────────────────────
+//
+// 不带凭据请求当前页面，跟随重定向，从登录页 URL 中提取 API 根路径。
+// 使用当前页面而非 origin 根路径，避免部分院校根路径返回 404。
+// 例如：
+//   fjsmu: 重定向到 .../jwglxt/xtgl/login_slogin.html → root = .../jwglxt
+//   hbfs:  重定向到 .../xtgl/login_slogin.html        → root = (origin only)
+// 若探测失败则回退到 window.location.origin（不加任何路径前缀）。
+//
+// 注：URL 解析逻辑与 lib.js 中的 parseApiBase() 一致；
+//     content.js 作为经典内容脚本无法使用 ES module import，因此在此内联。
+
+async function detectApiBase() {
+  const LOGIN_SUFFIX = "/xtgl/login_slogin.html";
+  try {
+    const resp = await fetch(window.location.href, {
+      credentials: "omit",
+      redirect: "follow",
+      cache: "no-store",
+    });
+    const idx = resp.url.indexOf(LOGIN_SUFFIX);
+    if (idx !== -1) {
+      return resp.url.slice(0, idx);
+    }
+  } catch {
+    // 网络错误或 CORS 限制时回退
+  }
+  return window.location.origin;
+}
+
 // ─── 核心：向正方 API 发起 POST 请求 ──────────────────────────────────────────
 
 async function postForm(url, body) {
@@ -133,19 +163,19 @@ function periodListsEqual(a, b) {
 //   因此探测"另一套作息"只需用另一个 xqm 再查一次，不需要 rq。
 
 async function fetchAllData(xnm, xqm, gnmkdm) {
-  const base = window.location.origin;
+  const apiBase = await detectApiBase();
   const qs = `?gnmkdm=${gnmkdm}`;
 
   // 1. 学生个人课表（含 kbList、xsxx、sjkList 等）
   //    kclbdm= 与页面实际请求保持一致
   const kbData = await postForm(
-    `${base}/jwglxt/kbcx/xskbcx_cxXsgrkb.html${qs}`,
+    `${apiBase}/kbcx/xskbcx_cxXsgrkb.html${qs}`,
     `xnm=${encodeURIComponent(xnm)}&xqm=${encodeURIComponent(xqm)}&kzlx=ck&xsdm=&kclbdm=`,
   );
 
   // 2. 当前学期作息（节前使用）
   const rjData1 = await postForm(
-    `${base}/jwglxt/kbcx/xskbcx_cxRjc.html${qs}`,
+    `${apiBase}/kbcx/xskbcx_cxRjc.html${qs}`,
     `xnm=${encodeURIComponent(xnm)}&xqm=${encodeURIComponent(xqm)}&xqh_id=1`,
   );
 
@@ -158,7 +188,7 @@ async function fetchAllData(xnm, xqm, gnmkdm) {
 
   try {
     const data = await postForm(
-      `${base}/jwglxt/kbcx/xskbcx_cxRjc.html${qs}`,
+      `${apiBase}/kbcx/xskbcx_cxRjc.html${qs}`,
       `xnm=${encodeURIComponent(xnm)}&xqm=${encodeURIComponent(otherXqm)}&xqh_id=1`,
     );
     if (
