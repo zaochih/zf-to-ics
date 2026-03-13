@@ -19,7 +19,7 @@
 
 ### 从 Chrome 网上应用店
 
-// TODO
+https://chromewebstore.google.com/detail/chnhhdhbciemnjaohomeohlklfdlmhbl
 
 ### 从 Microsoft Edge 插件商店
 
