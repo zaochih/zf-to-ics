@@ -79,7 +79,7 @@ function guessCurrentTerm() {
 // 例如：
 //   fjsmu: 重定向到 .../jwglxt/xtgl/login_slogin.html → root = .../jwglxt
 //   hbfs:  重定向到 .../xtgl/login_slogin.html        → root = (origin only)
-// 若探测失败则回退到传统的 /jwglxt 前缀。
+// 若探测失败则回退到 window.location.origin（不加任何路径前缀）。
 //
 // 注：URL 解析逻辑与 lib.js 中的 parseApiBase() 一致；
 //     content.js 作为经典内容脚本无法使用 ES module import，因此在此内联。
@@ -98,7 +98,7 @@ async function detectApiBase() {
   } catch {
     // 网络错误或 CORS 限制时回退
   }
-  return `${window.location.origin}/jwglxt`;
+  return window.location.origin;
 }
 
 // ─── 核心：向正方 API 发起 POST 请求 ──────────────────────────────────────────
