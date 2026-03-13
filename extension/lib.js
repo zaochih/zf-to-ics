@@ -230,6 +230,29 @@ export function buildLocation(course, showCampus) {
   return cdmc;
 }
 
+// ─── API 根路径提取 ───────────────────────────────────────────────────────────
+
+/**
+ * 从登录页面 URL 中提取 API 根路径。
+ *
+ * 正方系统各校登录页路径格式均为 <rootPath>/xtgl/login_slogin.html，
+ * 切掉该后缀即可得到 rootPath（含协议和域名）。
+ *
+ * 示例：
+ *   "https://jwxxt.fjsmu.edu.cn/jwglxt/xtgl/login_slogin.html"
+ *   → "https://jwxxt.fjsmu.edu.cn/jwglxt"
+ *
+ *   "http://jwxt1.hbfs.edu.cn/xtgl/login_slogin.html"
+ *   → "http://jwxt1.hbfs.edu.cn"
+ *
+ * 未匹配则返回 null。
+ */
+export function parseApiBase(loginUrl) {
+  const suffix = "/xtgl/login_slogin.html";
+  const idx = String(loginUrl ?? "").indexOf(suffix);
+  return idx !== -1 ? loginUrl.slice(0, idx) : null;
+}
+
 // ─── ICS 字符串工具 ───────────────────────────────────────────────────────────
 
 export function escapeIcsText(str) {
