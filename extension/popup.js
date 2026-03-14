@@ -188,7 +188,7 @@ async function publishToGist(icsContent, filename) {
 
   const gistPayload = {
     description: "正方教务课表 iCal 订阅 · 由 zf-to-ics 生成",
-    public: true,
+    public: false,
     files: { [filename]: { content: icsContent } },
   };
 
