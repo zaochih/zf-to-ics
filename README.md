@@ -62,7 +62,7 @@ https://chromewebstore.google.com/detail/chnhhdhbciemnjaohomeohlklfdlmhbl
 1. 在弹出窗口底部「ICAL 订阅」区域，点击「连接 GitHub 以发布 iCal 订阅链接」
 2. 在弹出的 GitHub 授权页面完成 OAuth 登录，授权后窗口会自动关闭并显示已连接的账号名
 3. 生成 ICS 后，点击「发布 / 更新 Gist 订阅链接」
-   - 首次发布：自动创建新的公开 Gist，并显示订阅 URL
+   - 首次发布：自动创建新的私密 Gist，并显示订阅 URL
    - 再次发布：更新同一 Gist 文件；订阅 URL 保持不变，日历应用无需重新添加
    - 若内容与上次完全一致，会提示「没有可提交的变更」并跳过写入
 4. 复制显示的「iCal 订阅链接」，粘贴到日历应用的「订阅日历」或「添加账户 > iCalendar」入口
